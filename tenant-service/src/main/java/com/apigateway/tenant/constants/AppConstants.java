@@ -1,7 +1,7 @@
 package com.apigateway.tenant.constants;
 
-public class Appconstants {
-    private Appconstants() {
+public class AppConstants {
+    private AppConstants() {
     }
         // JWT
         public static final String JWT_TOKEN_PREFIX = "Bearer ";

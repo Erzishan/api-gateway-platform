@@ -1,6 +1,6 @@
 package com.apigateway.tenant.util;
 
-import com.apigateway.tenant.constants.Appconstants;
+import com.apigateway.tenant.constants.AppConstants;
 import org.springframework.stereotype.Component;
 
 import java.security.MessageDigest;
@@ -21,12 +21,12 @@ public class ApiKeyGenerator {
         String randomPart = Base64.getUrlEncoder()
                 .withoutPadding()
                 .encodeToString(randomBytes);
-        return Appconstants.API_KEY_PREFIX + randomPart;
+        return AppConstants.API_KEY_PREFIX + randomPart;
     }
 
     // Extracts the first 8 characters for DB lookup
     public String extractPrefix(String fullKey) {
-        return fullKey.substring(0, Appconstants.API_KEY_PREFIX_LENGTH);
+        return fullKey.substring(0, AppConstants.API_KEY_PREFIX_LENGTH);
     }
 
     // Creates SHA-256 hash for secure storage

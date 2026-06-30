@@ -1,4 +1,4 @@
-package com.apigateway.tenant.dto.request;
+package com.apigateway.tenant.dto.response;
 
 import lombok.AllArgsConstructor;
 import lombok.Builder;
