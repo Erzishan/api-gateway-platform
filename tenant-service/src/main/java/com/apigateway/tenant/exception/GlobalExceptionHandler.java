@@ -98,7 +98,8 @@ public class GlobalExceptionHandler {
             Exception ex,
             HttpServletRequest request) {
 
-        log.error("Unexpected error: ", ex);
+        log.error("Unexpected error at {}: {}",
+                request.getRequestURI(), ex.getMessage(), ex);
 
         ErrorResponse error = ErrorResponse.builder()
                 .status(HttpStatus.INTERNAL_SERVER_ERROR.value())
