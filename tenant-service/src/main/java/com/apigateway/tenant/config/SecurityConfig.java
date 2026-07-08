@@ -5,6 +5,7 @@ import lombok.RequiredArgsConstructor;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 import org.springframework.security.authentication.AuthenticationManager;
+import org.springframework.security.authentication.AuthenticationProvider;
 import org.springframework.security.authentication.dao.DaoAuthenticationProvider;
 import org.springframework.security.config.annotation.authentication.configuration.AuthenticationConfiguration;
 import org.springframework.security.config.annotation.method.configuration.EnableMethodSecurity;
@@ -33,7 +34,7 @@ public class SecurityConfig {
     }
 
     @Bean
-    public DaoAuthenticationProvider authenticationProvider() {
+    public AuthenticationProvider authenticationProvider() {
         DaoAuthenticationProvider provider =
                 new DaoAuthenticationProvider();
         provider.setUserDetailsService(customUserDetailsService);
@@ -52,26 +53,23 @@ public class SecurityConfig {
             HttpSecurity http) throws Exception {
 
         http
-                // Disable CSRF - not needed for stateless REST APIs
                 .csrf(AbstractHttpConfigurer::disable)
 
-                // Define which endpoints are public vs protected
                 .authorizeHttpRequests(auth -> auth
-                        // Public endpoints - no token required
                         .requestMatchers(
                                 "/api/v1/auth/**",
                                 "/actuator/health"
                         ).permitAll()
-                        // Everything else requires authentication
                         .anyRequest().authenticated()
                 )
 
-                // Use stateless sessions - no server-side sessions
                 .sessionManagement(session -> session
-                        .sessionCreationPolicy(SessionCreationPolicy.STATELESS)
+                        .sessionCreationPolicy(
+                                SessionCreationPolicy.STATELESS)
                 )
 
-                // Register our JWT filter BEFORE Spring's default auth filter
+                .authenticationProvider(authenticationProvider())
+
                 .addFilterBefore(
                         jwtAuthenticationFilter,
                         UsernamePasswordAuthenticationFilter.class

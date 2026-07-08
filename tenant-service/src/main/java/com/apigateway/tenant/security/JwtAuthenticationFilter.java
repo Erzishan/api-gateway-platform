@@ -1,6 +1,5 @@
 package com.apigateway.tenant.security;
 
-import com.apigateway.tenant.constants.AppConstants;
 import jakarta.servlet.FilterChain;
 import jakarta.servlet.ServletException;
 import jakarta.servlet.http.HttpServletRequest;
@@ -12,7 +11,6 @@ import org.springframework.security.core.context.SecurityContextHolder;
 import org.springframework.security.core.userdetails.UserDetails;
 import org.springframework.security.web.authentication.WebAuthenticationDetailsSource;
 import org.springframework.stereotype.Component;
-import org.springframework.util.StringUtils;
 import org.springframework.web.filter.OncePerRequestFilter;
 
 import java.io.IOException;
@@ -31,54 +29,69 @@ public class JwtAuthenticationFilter extends OncePerRequestFilter {
                                     FilterChain filterChain)
             throws ServletException, IOException {
 
-        // Step 1: Extract the JWT from the Authorization header
-        String token = extractTokenFromRequest(request);
+        try {
+            // Step 1: Get Authorization header
+            String authHeader = request.getHeader("Authorization");
 
-        // Step 2: If token exists and is valid, authenticate the user
-        if (StringUtils.hasText(token) && jwtTokenProvider.validateToken(token)) {
+            log.debug("Authorization header: {}",
+                    authHeader != null ?
+                            authHeader.substring(0, Math.min(20, authHeader.length()))
+                            : "NULL");
 
-            // Step 3: Get the email from the token
+            // Step 2: Check header exists and starts with Bearer
+            if (authHeader == null || !authHeader.startsWith("Bearer ")) {
+                log.debug("No Bearer token found, skipping JWT filter");
+                filterChain.doFilter(request, response);
+                return;
+            }
+
+            // Step 3: Extract token (remove "Bearer " prefix - 7 characters)
+            String token = authHeader.substring(7);
+            log.debug("Token extracted, length: {}", token.length());
+
+            // Step 4: Validate token
+            if (!jwtTokenProvider.validateToken(token)) {
+                log.debug("Token validation failed");
+                filterChain.doFilter(request, response);
+                return;
+            }
+
+            // Step 5: Extract email from token
             String email = jwtTokenProvider.extractEmail(token);
+            log.debug("Email extracted from token: {}", email);
 
-            // Step 4: Load the full user from database
-            UserDetails userDetails =
-                    userDetailsService.loadUserByUsername(email);
+            // Step 6: Only authenticate if not already authenticated
+            if (email != null && SecurityContextHolder.getContext()
+                    .getAuthentication() == null) {
 
-            // Step 5: Create an authentication object
-            UsernamePasswordAuthenticationToken authentication =
-                    new UsernamePasswordAuthenticationToken(
-                            userDetails,
-                            null,
-                            userDetails.getAuthorities()
-                    );
+                // Step 7: Load user from database
+                UserDetails userDetails =
+                        userDetailsService.loadUserByUsername(email);
 
-            // Step 6: Add request details to authentication
-            authentication.setDetails(
-                    new WebAuthenticationDetailsSource()
-                            .buildDetails(request));
+                // Step 8: Create authentication object
+                UsernamePasswordAuthenticationToken authentication =
+                        new UsernamePasswordAuthenticationToken(
+                                userDetails,
+                                null,
+                                userDetails.getAuthorities()
+                        );
 
-            // Step 7: Store authentication in SecurityContext
-            SecurityContextHolder.getContext()
-                    .setAuthentication(authentication);
+                authentication.setDetails(
+                        new WebAuthenticationDetailsSource()
+                                .buildDetails(request));
 
-            log.debug("Authenticated user: {}", email);
+                // Step 9: Set authentication in SecurityContext
+                SecurityContextHolder.getContext()
+                        .setAuthentication(authentication);
+
+                log.debug("Successfully authenticated user: {}", email);
+            }
+
+        } catch (Exception e) {
+            log.error("JWT authentication error: {}", e.getMessage());
         }
 
-        // Step 8: Always continue to the next filter
+        // Step 10: Always continue filter chain
         filterChain.doFilter(request, response);
-    }
-
-    private String extractTokenFromRequest(HttpServletRequest request) {
-        String bearerToken = request.getHeader(
-                AppConstants.JWT_HEADER_NAME);
-
-        if (StringUtils.hasText(bearerToken)
-                && bearerToken.startsWith(
-                AppConstants.JWT_TOKEN_PREFIX)) {
-            // Remove "Bearer " prefix, return only the token
-            return bearerToken.substring(7);
-        }
-
-        return null;
     }
 }
