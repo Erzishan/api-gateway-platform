@@ -14,6 +14,12 @@ import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
+import com.apigateway.tenant.dto.response.PagedResponse;
+import com.apigateway.tenant.constants.AppConstants;
+import org.springframework.data.domain.Page;
+import org.springframework.data.domain.PageRequest;
+import org.springframework.data.domain.Pageable;
+import org.springframework.data.domain.Sort;
 import java.time.LocalDateTime;
 import java.util.List;
 import java.util.UUID;
@@ -65,14 +71,39 @@ public class ApiKeyService {
     }
 
     @Transactional(readOnly = true)
-    public List<ApiKeyResponse> listApiKeys() {
+    public PagedResponse<ApiKeyResponse> listApiKeys(
+            int page, int size, boolean activeOnly) {
+
         User currentUser = securityUtils.getCurrentUser();
         UUID tenantId = currentUser.getTenant().getId();
 
-        return apiKeyRepository.findAllByTenantId(tenantId)
+        if (size > AppConstants.MAX_PAGE_SIZE) {
+            size = AppConstants.MAX_PAGE_SIZE;
+        }
+
+        Pageable pageable = PageRequest.of(
+                page, size,
+                Sort.by(Sort.Direction.DESC, "createdAt"));
+
+        Page<ApiKey> apiKeyPage =
+                apiKeyRepository.findByTenantIdWithFilter(
+                        tenantId, activeOnly, pageable);
+
+        List<ApiKeyResponse> content = apiKeyPage
+                .getContent()
                 .stream()
                 .map(this::buildApiKeyResponse)
                 .collect(Collectors.toList());
+
+        return PagedResponse.<ApiKeyResponse>builder()
+                .content(content)
+                .page(apiKeyPage.getNumber())
+                .size(apiKeyPage.getSize())
+                .totalElements(apiKeyPage.getTotalElements())
+                .totalPages(apiKeyPage.getTotalPages())
+                .first(apiKeyPage.isFirst())
+                .last(apiKeyPage.isLast())
+                .build();
     }
 
     @Transactional(readOnly = true)

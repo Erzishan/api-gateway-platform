@@ -7,7 +7,19 @@ import java.time.LocalDateTime;
 import java.util.UUID;
 
 @Entity
-@Table(name = "api_keys")
+@Table(
+        name = "api_keys",
+        indexes = {
+                @Index(name = "idx_apikeys_tenant_id",
+                        columnList = "tenant_id"),
+                @Index(name = "idx_apikeys_key_prefix",
+                        columnList = "key_prefix"),
+                @Index(name = "idx_apikeys_revoked_at",
+                        columnList = "revoked_at"),
+                @Index(name = "idx_apikeys_tenant_active",
+                        columnList = "tenant_id, revoked_at")
+        }
+)
 @Data
 @Builder
 @NoArgsConstructor
@@ -57,7 +69,8 @@ public class ApiKey {
     }
 
     public boolean isExpired() {
-        return expiresAt != null && LocalDateTime.now().isAfter(expiresAt);
+        return expiresAt != null &&
+                LocalDateTime.now().isAfter(expiresAt);
     }
 
     public boolean isActive() {

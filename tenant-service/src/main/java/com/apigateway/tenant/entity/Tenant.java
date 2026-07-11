@@ -1,4 +1,5 @@
 package com.apigateway.tenant.entity;
+
 import jakarta.persistence.*;
 import lombok.*;
 
@@ -6,13 +7,23 @@ import java.time.LocalDateTime;
 import java.util.UUID;
 
 @Entity
-@Table(name = "tenants")
+@Table(
+        name = "tenants",
+        indexes = {
+                @Index(name = "idx_tenants_slug",
+                        columnList = "slug"),
+                @Index(name = "idx_tenants_status",
+                        columnList = "status"),
+                @Index(name = "idx_tenants_plan",
+                        columnList = "plan")
+        }
+)
 @Data
 @Builder
 @NoArgsConstructor
 @AllArgsConstructor
-
 public class Tenant {
+
     @Id
     @GeneratedValue(strategy = GenerationType.UUID)
     @Column(updatable = false, nullable = false)
@@ -55,7 +66,6 @@ public class Tenant {
     protected void onCreate() {
         createdAt = LocalDateTime.now();
         updatedAt = LocalDateTime.now();
-
     }
 
     @PreUpdate
@@ -70,5 +80,4 @@ public class Tenant {
     public enum TenantStatus {
         ACTIVE, SUSPENDED, DELETED
     }
-
 }

@@ -7,6 +7,9 @@ import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.kafka.annotation.KafkaListener;
 import org.springframework.stereotype.Service;
+import org.springframework.data.domain.Page;
+import org.springframework.data.domain.PageRequest;
+import org.springframework.data.domain.Pageable;
 
 import java.util.List;
 
@@ -47,8 +50,19 @@ public class AuditService {
         }
     }
 
-    public List<AuditLog> getAuditLogs(String tenantId) {
+    public Page<AuditLog> getAuditLogs(String tenantId,
+                                       String action, int page, int size) {
+
+        Pageable pageable = PageRequest.of(page, size);
+
+        if (action != null && !action.isEmpty()) {
+            return auditLogRepository
+                    .findByTenantIdAndActionOrderByOccurredAtDesc(
+                            tenantId, action, pageable);
+        }
+
         return auditLogRepository
-                .findByTenantIdOrderByOccurredAtDesc(tenantId);
+                .findByTenantIdOrderByOccurredAtDesc(
+                        tenantId, pageable);
     }
 }

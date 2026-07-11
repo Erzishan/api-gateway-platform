@@ -11,7 +11,7 @@ import org.springframework.http.ResponseEntity;
 import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.web.bind.annotation.*;
 
-import java.util.List;
+import com.apigateway.tenant.dto.response.PagedResponse;
 import java.util.UUID;
 
 @RestController
@@ -33,8 +33,13 @@ public class ApiKeyController {
 
     // All authenticated users can list keys
     @GetMapping
-    public ResponseEntity<List<ApiKeyResponse>> listApiKeys() {
-        return ResponseEntity.ok(apiKeyService.listApiKeys());
+    public ResponseEntity<PagedResponse<ApiKeyResponse>> listApiKeys(
+            @RequestParam(defaultValue = "0") int page,
+            @RequestParam(defaultValue = "20") int size,
+            @RequestParam(defaultValue = "false")
+            boolean activeOnly) {
+        return ResponseEntity.ok(
+                apiKeyService.listApiKeys(page, size, activeOnly));
     }
 
     // All authenticated users can view a specific key
