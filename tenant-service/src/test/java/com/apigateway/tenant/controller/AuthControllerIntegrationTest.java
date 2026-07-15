@@ -2,13 +2,17 @@ package com.apigateway.tenant.controller;
 
 import com.apigateway.tenant.dto.request.LoginRequest;
 import com.apigateway.tenant.dto.request.RegisterRequest;
+import com.apigateway.tenant.service.EmailService;
+import com.apigateway.tenant.service.KafkaProducerService;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.autoconfigure.web.servlet.AutoConfigureMockMvc;
 import org.springframework.boot.test.context.SpringBootTest;
+import org.springframework.boot.test.mock.mockito.MockBean;
 import org.springframework.http.MediaType;
+import org.springframework.kafka.core.KafkaTemplate;
 import org.springframework.test.context.DynamicPropertyRegistry;
 import org.springframework.test.context.DynamicPropertySource;
 import org.springframework.test.web.servlet.MockMvc;
@@ -34,6 +38,16 @@ class AuthControllerIntegrationTest {
                     .withUsername("test")
                     .withPassword("test");
 
+    // Mock Kafka — not needed for auth tests
+    @MockBean
+    private KafkaTemplate<String, Object> kafkaTemplate;
+
+    @MockBean
+    private KafkaProducerService kafkaProducerService;
+
+    @MockBean
+    private EmailService emailService;
+
     @DynamicPropertySource
     static void configureProperties(
             DynamicPropertyRegistry registry) {
@@ -44,13 +58,12 @@ class AuthControllerIntegrationTest {
                 postgres::getUsername);
         registry.add("spring.datasource.password",
                 postgres::getPassword);
-        // Disable Kafka for integration tests
-        registry.add("spring.autoconfigure.exclude",
-                () -> "org.springframework.boot.autoconfigure" +
-                        ".kafka.KafkaAutoConfiguration");
-        // Disable MongoDB for integration tests
-        registry.add("spring.data.mongodb.auto-index-creation",
-                () -> "false");
+        registry.add("spring.data.mongodb.uri",
+                () -> "mongodb://localhost:27017/test_db");
+        registry.add("spring.kafka.bootstrap-servers",
+                () -> "localhost:9999");
+        registry.add("spring.cache.type",
+                () -> "none");
     }
 
     @Autowired
@@ -70,9 +83,11 @@ class AuthControllerIntegrationTest {
 
         mockMvc.perform(post("/api/v1/auth/register")
                         .contentType(MediaType.APPLICATION_JSON)
-                        .content(objectMapper.writeValueAsString(request)))
+                        .content(objectMapper
+                                .writeValueAsString(request)))
                 .andExpect(status().isCreated())
-                .andExpect(jsonPath("$.accessToken").isNotEmpty())
+                .andExpect(jsonPath("$.accessToken")
+                        .isNotEmpty())
                 .andExpect(jsonPath("$.tokenType")
                         .value("Bearer"))
                 .andExpect(jsonPath("$.user.email")
@@ -94,13 +109,15 @@ class AuthControllerIntegrationTest {
         // First registration
         mockMvc.perform(post("/api/v1/auth/register")
                         .contentType(MediaType.APPLICATION_JSON)
-                        .content(objectMapper.writeValueAsString(request)))
+                        .content(objectMapper
+                                .writeValueAsString(request)))
                 .andExpect(status().isCreated());
 
         // Second registration with same email
         mockMvc.perform(post("/api/v1/auth/register")
                         .contentType(MediaType.APPLICATION_JSON)
-                        .content(objectMapper.writeValueAsString(request)))
+                        .content(objectMapper
+                                .writeValueAsString(request)))
                 .andExpect(status().isConflict())
                 .andExpect(jsonPath("$.error")
                         .value("Conflict"));
@@ -117,14 +134,15 @@ class AuthControllerIntegrationTest {
 
         mockMvc.perform(post("/api/v1/auth/register")
                         .contentType(MediaType.APPLICATION_JSON)
-                        .content(objectMapper.writeValueAsString(request)))
+                        .content(objectMapper
+                                .writeValueAsString(request)))
                 .andExpect(status().isBadRequest())
                 .andExpect(jsonPath("$.error")
                         .value("Validation Failed"));
     }
 
     @Test
-    @DisplayName("Login: valid credentials returns 200 with token")
+    @DisplayName("Login: valid credentials returns 200")
     void login_validCredentials_returns200() throws Exception {
         // First register
         RegisterRequest registerRequest = new RegisterRequest();
@@ -149,7 +167,8 @@ class AuthControllerIntegrationTest {
                         .content(objectMapper
                                 .writeValueAsString(loginRequest)))
                 .andExpect(status().isOk())
-                .andExpect(jsonPath("$.accessToken").isNotEmpty())
+                .andExpect(jsonPath("$.accessToken")
+                        .isNotEmpty())
                 .andExpect(jsonPath("$.user.email")
                         .value("login@testco.com"));
     }
