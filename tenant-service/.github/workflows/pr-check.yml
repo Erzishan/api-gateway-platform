@@ -1,0 +1,77 @@
+name: PR Check
+
+on:
+  pull_request:
+    branches: [ master, main ]
+    types: [ opened, synchronize, reopened ]
+
+jobs:
+  validate-pr:
+    name: Validate Pull Request
+    runs-on: ubuntu-latest
+
+    services:
+      postgres:
+        image: postgres:16
+        env:
+          POSTGRES_DB: tenant_db
+          POSTGRES_USER: aguser
+          POSTGRES_PASSWORD: agpassword
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd pg_isready
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+
+      mongodb:
+        image: mongo:7
+        ports:
+          - 27017:27017
+
+      redis:
+        image: redis:7-alpine
+        ports:
+          - 6379:6379
+        options: >-
+          --health-cmd "redis-cli ping"
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Set up JDK 21
+        uses: actions/setup-java@v4
+        with:
+          java-version: '21'
+          distribution: 'temurin'
+          cache: maven
+
+      - name: Compile
+        working-directory: ./tenant-service
+        run: ./mvnw clean compile -B
+
+      - name: Run all tests
+        working-directory: ./tenant-service
+        env:
+          SPRING_DATASOURCE_URL: jdbc:postgresql://localhost:5432/tenant_db
+          SPRING_DATASOURCE_USERNAME: aguser
+          SPRING_DATASOURCE_PASSWORD: agpassword
+          SPRING_DATA_MONGODB_URI: mongodb://localhost:27017/test_db
+          SPRING_DATA_REDIS_HOST: localhost
+          APP_JWT_SECRET: test-secret-key-for-ci-at-least-32-characters-long
+        run: |
+          ./mvnw test \
+            "-Dspring.kafka.bootstrap-servers=localhost:9999" \
+            "-Dspring.cache.type=none"
+
+      - name: Comment test results on PR
+        uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: pr-test-results
+          path: tenant-service/target/surefire-reports/

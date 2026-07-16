@@ -1,0 +1,159 @@
+name: CI Pipeline
+
+# Triggers — when does this pipeline run?
+on:
+  push:
+    branches: [ master, main, develop ]
+  pull_request:
+    branches: [ master, main ]
+
+# Environment variables available to all jobs
+env:
+  JAVA_VERSION: '21'
+  IMAGE_NAME: api-gateway-platform
+
+jobs:
+
+  # ─── JOB 1: Run Tests ────────────────────────────────────────
+  test:
+    name: Run Tests
+    runs-on: ubuntu-latest
+
+    # Services — Docker containers started before the job runs
+    # These replace your local Docker Compose for CI
+    services:
+      postgres:
+        image: postgres:16
+        env:
+          POSTGRES_DB: tenant_db
+          POSTGRES_USER: aguser
+          POSTGRES_PASSWORD: agpassword
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd pg_isready
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+
+      redis:
+        image: redis:7-alpine
+        ports:
+          - 6379:6379
+        options: >-
+          --health-cmd "redis-cli ping"
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+
+      mongodb:
+        image: mongo:7
+        ports:
+          - 27017:27017
+
+    steps:
+      # Step 1: Check out the code
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      # Step 2: Set up Java
+      - name: Set up JDK 21
+        uses: actions/setup-java@v4
+        with:
+          java-version: ${{ env.JAVA_VERSION }}
+          distribution: 'temurin'
+          cache: maven
+
+      # Step 3: Run tests
+      - name: Run tests
+        working-directory: ./tenant-service
+        env:
+          SPRING_DATASOURCE_URL: jdbc:postgresql://localhost:5432/tenant_db
+          SPRING_DATASOURCE_USERNAME: aguser
+          SPRING_DATASOURCE_PASSWORD: agpassword
+          SPRING_DATA_MONGODB_URI: mongodb://localhost:27017/gateway_analytics
+          SPRING_DATA_REDIS_HOST: localhost
+          APP_JWT_SECRET: test-secret-key-for-ci-at-least-32-characters-long
+        run: |
+          ./mvnw test \
+            "-Dspring.kafka.bootstrap-servers=localhost:9999" \
+            "-Dspring.cache.type=none"
+
+      # Step 4: Upload test results
+      - name: Upload test results
+        uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: test-results
+          path: tenant-service/target/surefire-reports/
+          retention-days: 7
+
+      # Step 5: Upload coverage report
+      - name: Upload coverage
+        uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: coverage-report
+          path: tenant-service/target/site/
+          retention-days: 7
+
+  # ─── JOB 2: Code Quality ─────────────────────────────────────
+  code-quality:
+    name: Code Quality Check
+    runs-on: ubuntu-latest
+    needs: test
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Set up JDK 21
+        uses: actions/setup-java@v4
+        with:
+          java-version: ${{ env.JAVA_VERSION }}
+          distribution: 'temurin'
+          cache: maven
+
+      - name: Compile and check for warnings
+        working-directory: ./tenant-service
+        run: ./mvnw clean compile -B
+
+      - name: Check dependency vulnerabilities
+        working-directory: ./tenant-service
+        run: |
+          ./mvnw dependency:tree -B | head -100
+
+  # ─── JOB 3: Build Docker Image ───────────────────────────────
+  build-image:
+    name: Build Docker Image
+    runs-on: ubuntu-latest
+    needs: test
+    if: github.ref == 'refs/heads/master' ||
+      github.ref == 'refs/heads/main'
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Set up JDK 21
+        uses: actions/setup-java@v4
+        with:
+          java-version: ${{ env.JAVA_VERSION }}
+          distribution: 'temurin'
+          cache: maven
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Build Docker image
+        working-directory: ./tenant-service
+        run: |
+          docker build \
+            -t ${{ env.IMAGE_NAME }}:${{ github.sha }} \
+            -t ${{ env.IMAGE_NAME }}:latest \
+            .
+
+      - name: Save image info
+        run: |
+          docker images ${{ env.IMAGE_NAME }}
+          echo "Image built successfully for commit: ${{ github.sha }}"
